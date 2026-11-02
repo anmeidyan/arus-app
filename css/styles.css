@@ -329,11 +329,10 @@ select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
 .quick-amounts button { flex: none; height: 32px; padding: 0 12px; border-radius: 10px; background: var(--brand-soft); color: var(--brand); font-size: 13px; font-weight: 700; transition: transform .12s; }
 .quick-amounts button:active { transform: scale(.94); }
 
-.cat-grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 78px; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -18px; padding: 2px 18px 4px; scroll-snap-type: x proximity; }
-.cat-grid::-webkit-scrollbar { display: none; }
+.cat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 2px 0 4px; }
 .cat-chip {
-  scroll-snap-align: start; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  height: 76px; padding: 6px 4px; border-radius: 16px; background: var(--bg-soft); border: 1.5px solid transparent;
+  display: flex; flex-direction: column; min-width: 0; align-items: center; justify-content: center; gap: 4px;
+  height: 74px; padding: 6px 3px; border-radius: 16px; background: var(--bg-soft); border: 1.5px solid transparent;
   transition: border-color .18s, background .18s, transform .12s;
 }
 .cat-chip:active { transform: scale(.95); }
