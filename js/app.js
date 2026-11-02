@@ -608,7 +608,7 @@ function viewSettings() {
     <dl class="kv">${state.me ? `<div><dt>Masuk sebagai</dt><dd>${esc(state.me)}</dd></div>` : ''}<div><dt>Web App</dt><dd class="mono">${esc(shortUrl)}</dd></div></dl>
     <button class="btn btn-ghost-danger btn-block" data-action="disconnect">Putuskan koneksi dari HP ini</button>
   </section>
-  <p class="foot">Arus v1.2 · Data tersimpan di Google Sheets milikmu</p>`;
+  <p class="foot">Arus v1.2.4 · Data tersimpan di Google Sheets milikmu</p>`;
 }
 
 /* ============================================================

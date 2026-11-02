@@ -5,7 +5,7 @@
  * - Permintaan ke Google Apps Script TIDAK pernah di-cache.
  * Naikkan VERSION setiap kali kamu mengubah file aplikasi.
  */
-const VERSION = 'arus-v1.2.3';
+const VERSION = 'arus-v1.2.4';
 const SHELL = [
   './', './index.html', './css/styles.css',
   './js/app.js', './js/api.js', './js/utils.js', './js/charts.js',
@@ -13,7 +13,7 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -46,7 +46,8 @@ self.addEventListener('fetch', (e) => {
   e.respondWith((async () => {
     const cache = await caches.open(VERSION);
     try {
-      const res = await Promise.race([fetch(req), timeout(4000)]);
+      // cache: 'no-cache' = selalu cek versi terbaru ke server (abaikan cache HTTP browser)
+      const res = await Promise.race([fetch(req, { cache: 'no-cache' }), timeout(4000)]);
       if (res.ok) cache.put(req, res.clone());
       return res;
     } catch {
