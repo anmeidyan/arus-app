@@ -61,6 +61,9 @@ const I = {
   pulse: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></svg>',
   eye: '<svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   download: '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 20h14"/></svg>',
+  wallet: '<svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M16 13.5h.01"/></svg>',
+  gear: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
   logo: '<svg viewBox="0 0 32 32"><rect x="4.5" y="9" width="23" height="14" rx="3"/><circle cx="16" cy="16" r="3.4"/><path d="M9 16h.01M23 16h.01"/></svg>',
 };
 
@@ -141,10 +144,41 @@ function ownerSwitch() {
 const inRange = (list, r) => list.filter((t) => t.date >= r.start && t.date <= r.end);
 const currentRange = () => U.periodRange(prefs.period, prefs.custom);
 
+/* ---------- Aset ---------- */
+const ASSET = { OUT: 'Tabungan & Investasi', IN: 'Pencairan Aset', DEFAULT: 'Tabungan umum' };
+const isAssetCat = (type, cat) => (type === 'pengeluaran' && cat === ASSET.OUT) || (type === 'pemasukan' && cat === ASSET.IN);
+const isAssetTx = (t) => isAssetCat(t.type, t.category);
+const assetName = (t) => (t.asset || '').trim() || ASSET.DEFAULT;
+
+/** Buku aset: per pemilik + nama → total setor, cair, saldo, riwayat. */
+function assetBook(list) {
+  const map = new Map();
+  for (const t of list) {
+    if (!isAssetTx(t)) continue;
+    const owner = t.owner || state.users[0] || '';
+    const key = `${owner}|${assetName(t)}`;
+    const a = map.get(key) || { key, name: assetName(t), owner, setor: 0, cair: 0, count: 0, last: '', txs: [] };
+    if (t.type === 'pengeluaran') { a.setor += t.amount; a.count++; } else a.cair += t.amount;
+    if (t.date > a.last) a.last = t.date;
+    a.txs.push(t);
+    map.set(key, a);
+  }
+  return [...map.values()].map((a) => ({ ...a, total: a.setor - a.cair }))
+    .sort((a, b) => (b.total > 0) - (a.total > 0) || b.total - a.total || a.name.localeCompare(b.name));
+}
+const myAssets = () => assetBook(allTx().filter(isMine));
+
+/**
+ * income/expense TIDAK memasukkan aset (bukan pemasukan/pengeluaran sungguhan),
+ * tapi net (saldo kas) tetap berkurang saat setor dan bertambah saat cair.
+ */
 function sums(list) {
-  let income = 0, expense = 0;
-  for (const t of list) t.type === 'pemasukan' ? (income += t.amount) : (expense += t.amount);
-  return { income, expense, net: income - expense, count: list.length };
+  let income = 0, expense = 0, toAsset = 0, fromAsset = 0;
+  for (const t of list) {
+    if (isAssetTx(t)) t.type === 'pengeluaran' ? (toAsset += t.amount) : (fromAsset += t.amount);
+    else t.type === 'pemasukan' ? (income += t.amount) : (expense += t.amount);
+  }
+  return { income, expense, toAsset, fromAsset, assetNet: toAsset - fromAsset, net: income - expense - toAsset + fromAsset, count: list.length };
 }
 
 function catIcon(type, name) {
@@ -155,7 +189,7 @@ function catIcon(type, name) {
 function byCategory(list, type = 'pengeluaran') {
   const map = new Map();
   for (const t of list) {
-    if (t.type !== type) continue;
+    if (t.type !== type || isAssetTx(t)) continue;
     const m = map.get(t.category) || { name: t.category, icon: catIcon(type, t.category), value: 0, count: 0 };
     m.value += t.amount; m.count++;
     map.set(t.category, m);
@@ -168,10 +202,10 @@ function byCategory(list, type = 'pengeluaran') {
 function categoriesFor(type) {
   const counts = {};
   for (const t of allTx()) if (t.type === type && isMine(t)) counts[t.category] = (counts[t.category] || 0) + 1;
-  return state.categories
-    .map((c, i) => ({ ...c, i }))
-    .filter((c) => c.type === type)
-    .sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0) || a.i - b.i);
+  const list = state.categories.map((c, i) => ({ ...c, i })).filter((c) => c.type === type);
+  const special = type === 'pengeluaran' ? { name: ASSET.OUT, icon: '🐷' } : { name: ASSET.IN, icon: '💰' };
+  if (!list.some((c) => c.name === special.name)) list.push({ ...special, type, i: 999 });
+  return list.sort((a, b) => (counts[b.name] || 0) - (counts[a.name] || 0) || a.i - b.i);
 }
 
 const pct = (x) => `${Math.round(x * 100)}%`;
@@ -186,15 +220,15 @@ function insights(range) {
   const curExp = sums(inRange(all, c.current)).expense;
   const prevExp = sums(inRange(all, c.previous)).expense;
   const daily = {};
-  cur.forEach((t) => { if (t.type === 'pengeluaran') daily[t.date] = (daily[t.date] || 0) + t.amount; });
+  cur.forEach((t) => { if (t.type === 'pengeluaran' && !isAssetTx(t)) daily[t.date] = (daily[t.date] || 0) + t.amount; });
   const peakDay = Object.entries(daily).sort((a, b) => b[1] - a[1])[0];
   return {
     s, cats, top: cats[0], days,
     avg: s.expense / days,
     curExp, prevExp, cmpLabel: c.label,
     change: prevExp > 0 ? (curExp - prevExp) / prevExp : null,
-    biggest: cur.filter((t) => t.type === 'pengeluaran').sort((a, b) => b.amount - a.amount)[0],
-    saveRate: s.income > 0 ? s.net / s.income : null,
+    biggest: cur.filter((t) => t.type === 'pengeluaran' && !isAssetTx(t)).sort((a, b) => b.amount - a.amount)[0],
+    saveRate: s.income > 0 ? (s.income - s.expense) / s.income : null,
     peakDay,
   };
 }
@@ -202,17 +236,17 @@ function insights(range) {
 /* ============================================================
  * Render: kerangka
  * ========================================================== */
-const VIEW_TITLE = { home: 'Arus', history: 'Riwayat', stats: 'Statistik', settings: 'Pengaturan' };
+const VIEW_TITLE = { home: 'Arus', history: 'Riwayat', assets: 'Aset', stats: 'Statistik', settings: 'Pengaturan' };
 
 function render() {
   renderTopbar();
-  $$('.bottom-nav [data-nav]').forEach((b) => {
+  $$('.bottom-nav [data-nav], .topbar [data-nav]').forEach((b) => {
     const on = b.dataset.nav === state.view;
     b.classList.toggle('is-active', on);
     b.setAttribute('aria-current', on ? 'page' : 'false');
   });
   const view = $('#view');
-  const html = { home: viewHome, history: viewHistory, stats: viewStats, settings: viewSettings }[state.view]();
+  const html = { home: viewHome, history: viewHistory, assets: viewAssets, stats: viewStats, settings: viewSettings }[state.view]();
   view.innerHTML = html;
   if (state.renderedView !== state.view) {
     view.classList.remove('enter'); void view.offsetWidth; view.classList.add('enter');
@@ -253,11 +287,13 @@ function periodChips() {
 
 function txItem(t, showDate = false) {
   const inc = t.type === 'pemasukan';
-  const sub = [t.note, showDate ? U.dayLabel(t.date) : ''].filter(Boolean).join(' · ') || TYPE_LABEL[t.type];
+  const asset = isAssetTx(t);
+  const lead = asset ? (inc ? 'Dicairkan dari aset' : 'Disetor ke aset') : '';
+  const sub = [lead, t.note, showDate ? U.dayLabel(t.date) : ''].filter(Boolean).join(' · ') || TYPE_LABEL[t.type];
   return `<button class="tx-item" data-tx="${esc(t.id)}">
-    <span class="tx-icon ${t.type}">${esc(catIcon(t.type, t.category))}</span>
-    <span class="tx-main"><span class="tx-cat">${esc(t.category || 'Tanpa kategori')}</span><span class="tx-sub">${esc(sub)}</span></span>
-    <span class="tx-right"><span class="tx-amt ${t.type}">${inc ? '+' : '-'}${fmt(t.amount)}</span>
+    <span class="tx-icon ${asset ? 'aset' : t.type}">${esc(catIcon(t.type, t.category))}</span>
+    <span class="tx-main"><span class="tx-cat">${esc(asset ? assetName(t) : (t.category || 'Tanpa kategori'))}</span><span class="tx-sub">${esc(sub)}</span></span>
+    <span class="tx-right"><span class="tx-amt ${asset ? 'aset' : t.type}">${inc ? '+' : '-'}${fmt(t.amount)}</span>
     ${t.pending ? '<span class="badge-pending">Menunggu sinkron</span>' : ''}
     ${multiUser() && ownerMode() === 'all' && !isMine(t) ? `<span class="owner-tag">${esc(t.owner)}</span>` : ''}</span>
   </button>`;
@@ -287,6 +323,7 @@ function viewHome() {
   const balance = carry + s.net;
   const CARRY_FROM = { today: 'dari kemarin', week: 'dari minggu lalu', month: 'dari bulan lalu', custom: 'sebelum periode' };
   const FLOW_LABEL = { today: 'hari ini', week: 'minggu ini', month: 'bulan ini', custom: 'periode ini' };
+  const assetTotal = assetBook(viewTx()).reduce((a, x) => a + Math.max(x.total, 0), 0);
 
   return `
   <section class="hero">
@@ -303,6 +340,8 @@ function viewHome() {
       <div class="glass"><span class="bc-ic in">${I.down}</span><div><small>Pemasukan</small><strong>${fmt(s.income)}</strong></div></div>
       <div class="glass"><span class="bc-ic out">${I.up}</span><div><small>Pengeluaran</small><strong>${fmt(s.expense)}</strong></div></div>
     </div>
+    ${assetTotal || s.assetNet ? `<button class="bc-asset" data-nav="assets">${I.wallet}
+      <span>${s.assetNet ? `${s.assetNet > 0 ? 'Disetor ke aset' : 'Dicairkan dari aset'} <b>${fmt(Math.abs(s.assetNet))}</b> · ` : ''}Total aset <b>${fmt(assetTotal)}</b></span>${I.chevron}</button>` : ''}
   </section>
   ${insightCards(ins)}
   <section class="card">
@@ -389,7 +428,7 @@ function viewStats() {
       <div class="vs-bar"><i class="in" style="width:${(income / maxV) * 100}%"></i></div>
       <div class="vs-row"><span>Pengeluaran</span><strong class="c-out">${fmt(expense)}</strong></div>
       <div class="vs-bar"><i class="out" style="width:${(expense / maxV) * 100}%"></i></div>
-      <p class="vs-note">${vsNote}</p>
+      <p class="vs-note">${vsNote}${s.toAsset ? `<br>Disetor ke aset <b>${fmt(s.toAsset)}</b> (tidak dihitung sebagai pengeluaran).` : ''}</p>
     </div>
   </section>
   ${multiUser() && ownerMode() === 'all' ? perPersonCard(range) : ''}
@@ -424,7 +463,7 @@ function trendChart(range) {
     if (U.diffDays(start, end) < 6) start = U.addDays(end, -6);
     if (U.diffDays(start, end) > 61) start = U.addDays(end, -61);
     const daily = {};
-    all.forEach((t) => { if (t.type === 'pengeluaran' && t.date >= start && t.date <= end) daily[t.date] = (daily[t.date] || 0) + t.amount; });
+    all.forEach((t) => { if (t.type === 'pengeluaran' && !isAssetTx(t) && t.date >= start && t.date <= end) daily[t.date] = (daily[t.date] || 0) + t.amount; });
     const data = [];
     for (let d = start; d <= end; d = U.addDays(d, 1)) {
       const dt = U.fromISO(d);
@@ -442,7 +481,7 @@ function trendChart(range) {
     months.push({ key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`, d });
   }
   const agg = Object.fromEntries(months.map((m) => [m.key, { inc: 0, exp: 0 }]));
-  all.forEach((t) => { const k = t.date.slice(0, 7); if (agg[k]) agg[k][t.type === 'pemasukan' ? 'inc' : 'exp'] += t.amount; });
+  all.forEach((t) => { const k = t.date.slice(0, 7); if (agg[k] && !isAssetTx(t)) agg[k][t.type === 'pemasukan' ? 'inc' : 'exp'] += t.amount; });
   const data = months.map((m) => ({ label: U.MONTHS[m.d.getMonth()], title: `${U.MONTHS_LONG[m.d.getMonth()]} ${m.d.getFullYear()}`, values: agg[m.key] }));
   return `<p class="chart-cap">6 bulan terakhir</p>
     <div class="chart-legend"><span><i style="background:${COLOR.income}"></i>Pemasukan</span><span><i style="background:${COLOR.expense}"></i>Pengeluaran</span></div>
@@ -488,7 +527,7 @@ function viewHistory() {
       <input id="hist-q" type="search" placeholder="Cari catatan, kategori, nominal…" value="${esc(h.q)}" autocomplete="off" enterkeyhint="search" aria-label="Cari transaksi">
     </label>
     <div class="chips">
-      ${[['all', 'Semua'], ['pemasukan', 'Pemasukan'], ['pengeluaran', 'Pengeluaran']].map(([k, l]) =>
+      ${[['all', 'Semua'], ['pemasukan', 'Pemasukan'], ['pengeluaran', 'Pengeluaran'], ['aset', 'Aset']].map(([k, l]) =>
         `<button class="chip ${h.type === k ? 'is-active' : ''}" data-htype="${k}">${l}</button>`).join('')}
       <button class="chip chip-icon ${nFilter ? 'is-on' : ''}" data-action="hist-filter" aria-label="Filter kategori dan tanggal">${I.filter}${nFilter ? `<b>${nFilter}</b>` : 'Filter'}</button>
     </div>
@@ -502,12 +541,13 @@ function histFiltered() {
   const q = h.q.trim().toLowerCase();
   const qDigits = q.replace(/[^\d]/g, '');
   return viewTx().filter((t) => {
-    if (h.type !== 'all' && t.type !== h.type) return false;
+    if (h.type === 'aset') { if (!isAssetTx(t)) return false; }
+    else if (h.type !== 'all' && (t.type !== h.type || isAssetTx(t))) return false;
     if (h.cat && t.category !== h.cat) return false;
     if (h.from && t.date < h.from) return false;
     if (h.to && t.date > h.to) return false;
     if (q) {
-      const hay = `${t.category} ${t.note} ${U.formatDate(t.date, 'long')} ${TYPE_LABEL[t.type]}`.toLowerCase();
+      const hay = `${t.category} ${t.note} ${U.formatDate(t.date, 'long')} ${TYPE_LABEL[t.type]} ${isAssetTx(t) ? `aset ${assetName(t)}` : ''}`.toLowerCase();
       const amountHit = qDigits.length >= 2 && String(t.amount).includes(qDigits);
       if (!hay.includes(q) && !amountHit) return false;
     }
@@ -537,14 +577,137 @@ function renderHistList() {
     if (g && g.date === t.date) g.items.push(t); else groups.push({ date: t.date, items: [t] });
   }
   box.innerHTML = `
-    <div class="hist-summary"><span>${list.length} transaksi</span><span class="c-in">+${fmt(s.income)}</span><span class="c-out">-${fmt(s.expense)}</span></div>
+    <div class="hist-summary"><span>${list.length} transaksi</span>${s.income || !s.toAsset ? `<span class="c-in">+${fmt(s.income)}</span>` : ''}${s.expense || !s.toAsset ? `<span class="c-out">-${fmt(s.expense)}</span>` : ''}${s.assetNet ? `<span class="c-aset">${s.assetNet > 0 ? '→' : '←'} aset ${fmt(Math.abs(s.assetNet))}</span>` : ''}</div>
     ${groups.map((g) => {
       const gs = sums(list.filter((t) => t.date === g.date));
       return `<section class="day-group"><header><span>${esc(g.date ? U.dayLabel(g.date) : 'Tanpa tanggal')}</span>
-        <span class="${gs.net >= 0 ? 'c-in' : 'c-out'}">${fmt(gs.net, { sign: true })}</span></header>
+        <span class="${h.type === 'aset' ? 'c-aset' : gs.net >= 0 ? 'c-in' : 'c-out'}">${h.type === 'aset' ? `${gs.assetNet > 0 ? '→' : '←'} ${fmt(Math.abs(gs.assetNet))}` : fmt(gs.net, { sign: true })}</span></header>
         <div class="tx-list">${g.items.map((t) => txItem(t)).join('')}</div></section>`;
     }).join('')}
     ${list.length > h.limit ? `<button class="btn btn-soft btn-block" data-action="hist-more">Tampilkan lebih banyak (${list.length - h.limit} lagi)</button>` : ''}`;
+}
+
+/* ============================================================
+ * Tampilan: Aset
+ * ========================================================== */
+function viewAssets() {
+  if (!state.loaded) return `${skeleton(40)}${skeleton(170)}${skeleton(64, 4)}`;
+  const list = viewTx();
+  const book = assetBook(list);
+  const active = book.filter((a) => a.total > 0);
+  const closed = book.filter((a) => a.total <= 0);
+  const total = active.reduce((a, x) => a + x.total, 0);
+  const cash = sums(list).net;
+  const range = U.periodRange('month');
+  const monthIn = sums(inRange(list, range));
+  const who = multiUser() ? ` · ${esc(OWNER_LABEL()[ownerMode()])}` : '';
+  const showOwner = multiUser() && ownerMode() === 'all';
+
+  const row = (a) => `<button class="asset-row ${a.total <= 0 ? 'is-closed' : ''}" data-asset-open="${esc(a.key)}">
+    <span class="asset-ic">${a.total > 0 ? '🐷' : '✓'}</span>
+    <span class="asset-main"><span class="asset-name">${esc(a.name)}</span>
+      <span class="asset-sub">${showOwner && a.owner !== state.me ? `<span class="owner-tag">${esc(a.owner)}</span> ` : ''}${a.total > 0 ? `${a.count}× setor · terakhir ${U.formatDate(a.last, 'short')}` : 'Sudah dicairkan semua'}</span></span>
+    <span class="asset-val">${fmt(Math.max(a.total, 0))}${total > 0 && a.total > 0 ? `<small>${pct(a.total / total)}</small>` : ''}</span>
+  </button>`;
+
+  return `
+  ${ownerSwitch()}
+  <section class="asset-hero">
+    <div class="bc-label">Total aset${who}</div>
+    <div class="bc-amount">${fmt(total)}</div>
+    <div class="bc-split">
+      <div class="glass"><span class="bc-ic in">${I.wallet}</span><div><small>Saldo kas</small><strong>${fmt(cash)}</strong></div></div>
+      <div class="glass"><span class="bc-ic in">${I.spark}</span><div><small>Kekayaan bersih</small><strong>${fmt(cash + total)}</strong></div></div>
+    </div>
+    <div class="bc-carry"><span>Disetor ${esc(range.label)}<b>${fmt(monthIn.toAsset)}</b></span>${monthIn.fromAsset ? `<span>Dicairkan<b>${fmt(monthIn.fromAsset)}</b></span>` : ''}</div>
+  </section>
+  ${ownerMode() !== 'partner' ? `<div class="btn-row asset-actions">
+    <button class="btn btn-primary" data-action="asset-add">${I.plus}Setor ke aset</button>
+    <button class="btn btn-soft" data-action="asset-withdraw" ${myAssets().some((a) => a.total > 0) ? '' : 'disabled'}>Cairkan</button>
+  </div>` : ''}
+  <section class="card">
+    <div class="card-head"><h2>Daftar aset</h2><span class="muted small">${active.length} aset</span></div>
+    ${book.length ? `<div class="asset-list">${active.map(row).join('')}</div>
+      ${closed.length ? `<p class="asset-sep">Sudah dicairkan</p><div class="asset-list">${closed.map(row).join('')}</div>` : ''}`
+      : `<div class="empty"><div class="empty-art">${EMPTY_ART}</div><h3>${ownerMode() === 'partner' ? `${esc(partnerName())} belum punya aset` : 'Belum ada aset'}</h3>
+         <p>Catat pengeluaran dengan kategori <b>${ASSET.OUT}</b> untuk mulai menabung atau berinvestasi.</p></div>`}
+  </section>
+  ${book.length ? `<section class="card"><div class="card-head"><h2>Pertumbuhan aset</h2></div>${assetGrowthChart(list)}</section>` : ''}`;
+}
+
+function assetGrowthChart(list) {
+  const months = [];
+  const now = U.fromISO(U.today());
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const end = U.toISO(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+    months.push({ d, end });
+  }
+  const assetTx = list.filter(isAssetTx);
+  const data = months.map((m) => {
+    const v = assetTx.filter((t) => t.date <= m.end).reduce((a, t) => a + (t.type === 'pengeluaran' ? t.amount : -t.amount), 0);
+    return { label: U.MONTHS[m.d.getMonth()], title: `Akhir ${U.MONTHS_LONG[m.d.getMonth()]} ${m.d.getFullYear()}`, values: { v: Math.max(v, 0) } };
+  });
+  return `<p class="chart-cap">Total aset di akhir tiap bulan · 6 bulan terakhir</p>
+    ${barChart(data, [{ key: 'v', color: COLOR.brand, label: 'Total aset' }])}`;
+}
+
+function openAsset(key) {
+  const a = assetBook(viewTx()).find((x) => x.key === key) || assetBook(allTx()).find((x) => x.key === key);
+  if (!a) return;
+  const mine = !state.me || a.owner === state.me;
+  const txs = a.txs.slice().sort(newestFirst);
+  const body = openSheet(`
+    <div class="sheet-head"><h2>${esc(a.name)}</h2><button class="icon-btn" data-close aria-label="Tutup">${I.x}</button></div>
+    <div class="asset-detail">
+      <div class="detail-icon aset">🐷</div>
+      <div class="detail-type">${multiUser() ? `Aset ${esc(a.owner)}${mine ? ' (kamu)' : ''}` : 'Total setoran'}</div>
+      <div class="detail-amt aset">${fmt(Math.max(a.total, 0))}</div>
+      <dl class="kv">
+        <div><dt>Total disetor</dt><dd>${fmt(a.setor)} · ${a.count}×</dd></div>
+        ${a.cair ? `<div><dt>Total dicairkan</dt><dd>${fmt(a.cair)}</dd></div>` : ''}
+        <div><dt>Terakhir</dt><dd>${U.formatDate(a.last, 'long')}</dd></div>
+      </dl>
+    </div>
+    ${mine ? `<div class="sheet-actions three">
+      <button class="btn btn-soft" data-act="rename">Ganti nama</button>
+      <button class="btn btn-soft" data-act="withdraw" ${a.total > 0 ? '' : 'disabled'}>Cairkan</button>
+      <button class="btn btn-primary" data-act="deposit">${I.plus}Setor</button>
+    </div>
+    <form class="rename-form" id="rename-form" hidden novalidate>
+      <input class="input" id="rename-input" maxlength="60" value="${esc(a.name)}" aria-label="Nama aset baru" autocomplete="off">
+      <button class="btn btn-primary btn-sm" type="submit">Simpan</button>
+    </form>` : `<p class="readonly-note">${I.eye}Aset ${esc(a.owner)} hanya bisa dilihat.</p>`}
+    <h3 class="sheet-sub">Riwayat</h3>
+    <div class="tx-list">${txs.map((t) => txItem(t, true)).join('')}</div>`);
+  if (!mine) return;
+  $('[data-act="deposit"]', body).onclick = () => openTxForm(null, { type: 'pengeluaran', category: ASSET.OUT, asset: a.name });
+  $('[data-act="withdraw"]', body).onclick = () => openTxForm(null, { type: 'pemasukan', category: ASSET.IN, asset: a.name });
+  $('[data-act="rename"]', body).onclick = () => { const f = $('#rename-form', body); f.hidden = !f.hidden; if (!f.hidden) $('#rename-input', body).select(); };
+  $('#rename-form', body).onsubmit = (e) => { e.preventDefault(); renameAsset(a.name, $('#rename-input', body).value.trim(), $('#rename-form button', body)); };
+}
+
+async function renameAsset(from, to, btn) {
+  if (!to) { toast('Isi nama aset baru.', 'error'); return; }
+  if (to === from) { closeSheet(); return; }
+  if (myAssets().some((a) => a.name.toLowerCase() === to.toLowerCase() && a.name !== from)) {
+    const ok = await confirmDialog({ title: 'Gabungkan aset?', text: `Aset <b>${esc(to)}</b> sudah ada. Setoran <b>${esc(from)}</b> akan digabung ke sana.`, confirm: 'Gabungkan' });
+    if (!ok) return;
+    to = myAssets().find((a) => a.name.toLowerCase() === to.toLowerCase()).name;
+  }
+  const mineHit = (t) => isMine(t) && isAssetTx(t) && assetName(t) === from;
+  const hasSynced = state.tx.some(mineHit);
+  setBtnLoading(btn, true, '');
+  try {
+    if (hasSynced) await api('renameAsset', { from, to });
+    state.tx = state.tx.map((t) => (mineHit(t) ? { ...t, asset: to } : t));
+    state.queue.forEach((q) => { if (mineHit(q.tx)) q.tx.asset = to; });
+    saveCache(); saveQueue(); closeSheet(); render();
+    toast(`Aset diganti menjadi "${to}"`, 'success');
+  } catch (err) {
+    setBtnLoading(btn, false);
+    toast(err.isNetwork ? 'Butuh koneksi internet untuk mengganti nama aset.' : err.message, 'error');
+  }
 }
 
 /* ============================================================
@@ -608,7 +771,7 @@ function viewSettings() {
     <dl class="kv">${state.me ? `<div><dt>Masuk sebagai</dt><dd>${esc(state.me)}</dd></div>` : ''}<div><dt>Web App</dt><dd class="mono">${esc(shortUrl)}</dd></div></dl>
     <button class="btn btn-ghost-danger btn-block" data-action="disconnect">Putuskan koneksi dari HP ini</button>
   </section>
-  <p class="foot">Arus v1.2.4 · Data tersimpan di Google Sheets milikmu</p>`;
+  <p class="foot">Arus v1.3 · Data tersimpan di Google Sheets milikmu</p>`;
 }
 
 /* ============================================================
@@ -690,13 +853,14 @@ function setBtnLoading(btn, on, text) {
 /* ============================================================
  * Form tambah / ubah transaksi
  * ========================================================== */
-function openTxForm(existing = null) {
+function openTxForm(existing = null, preset = null) {
   const f = {
-    type: existing?.type || prefs.lastType || 'pengeluaran',
+    type: existing?.type || preset?.type || prefs.lastType || 'pengeluaran',
     amount: existing?.amount || 0,
-    category: existing?.category || '',
+    category: existing?.category || preset?.category || '',
     date: existing?.date || U.today(),
     note: existing?.note || '',
+    asset: existing ? (isAssetTx(existing) ? assetName(existing) : '') : (preset?.asset || ''),
   };
   const quick = [5000, 10000, 20000, 50000, 100000];
   const body = openSheet(`
@@ -719,6 +883,13 @@ function openTxForm(existing = null) {
         <div class="field-label">Kategori</div>
         <div class="cat-grid" id="f-cats" role="radiogroup" aria-label="Kategori"></div>
         <p class="field-error" id="err-cat" role="alert"></p>
+      </div>
+      <div class="field asset-field" id="asset-field" hidden>
+        <label class="field-label" for="f-asset" id="asset-label">Nama aset</label>
+        <input id="f-asset" class="input" maxlength="60" autocomplete="off" enterkeyhint="done" placeholder="mis. Reksadana, Emas, Deposito" value="${esc(f.asset)}">
+        <div class="asset-picks" id="asset-picks"></div>
+        <p class="field-hint" id="asset-hint"></p>
+        <p class="field-error" id="err-asset" role="alert"></p>
       </div>
       <div class="field">
         <div class="field-label">Tanggal</div>
@@ -747,6 +918,7 @@ function openTxForm(existing = null) {
       if (!categoriesFor(t).some((c) => c.name === f.category)) f.category = '';
     }
     renderCats();
+    renderAssetField();
     $('#f-submit', body).innerHTML = `${I.check}${existing ? 'Simpan Perubahan' : `Simpan ${TYPE_LABEL[t]}`}`;
   };
 
@@ -756,7 +928,35 @@ function openTxForm(existing = null) {
     $('#f-cats', body).innerHTML = list.map((c) => `
       <button type="button" role="radio" class="cat-chip ${c.name === f.category ? 'is-active' : ''}" data-cat="${esc(c.name)}" aria-checked="${c.name === f.category}">
         <span class="cc-ic">${esc(c.icon)}</span><span class="cc-name">${esc(c.name)}</span></button>`).join('')
-      || '<p class="muted small">Belum ada kategori. Tambahkan di menu Atur.</p>';
+      || '<p class="muted small">Belum ada kategori. Tambahkan di Pengaturan (ikon kanan atas).</p>';
+  };
+
+  // Saldo aset milikku, tidak termasuk transaksi yang sedang diubah (agar edit pencairan tidak terhitung dua kali)
+  const assetBalances = () => assetBook(allTx().filter((t) => isMine(t) && (!existing || t.id !== existing.id)));
+
+  const renderAssetField = () => {
+    const box = $('#asset-field', body);
+    const on = isAssetCat(f.type, f.category);
+    box.hidden = !on;
+    if (!on) return;
+    const withdraw = f.type === 'pemasukan';
+    const books = assetBalances().filter((a) => !withdraw || a.total > 0);
+    if (withdraw && !f.asset && books.length === 1) f.asset = books[0].name;
+    $('#asset-label', body).textContent = withdraw ? 'Cairkan dari aset' : 'Nama aset';
+    $('#f-asset', body).value = f.asset;
+    $('#f-asset', body).placeholder = withdraw ? 'Pilih aset di bawah' : 'mis. Reksadana, Emas, Deposito';
+    $('#asset-picks', body).innerHTML = books.map((a) => `<button type="button" class="chip ${a.name === f.asset ? 'is-active' : ''}" data-asset-pick="${esc(a.name)}">${esc(a.name)}${withdraw ? ` · ${U.compact(a.total)}` : ''}</button>`).join('');
+    updateAssetHint(books);
+  };
+
+  const updateAssetHint = (books = null) => {
+    const withdraw = f.type === 'pemasukan';
+    books = books || assetBalances().filter((a) => !withdraw || a.total > 0);
+    const name = f.asset.trim();
+    const cur = books.find((a) => a.name === name);
+    $('#asset-hint', body).textContent = withdraw
+      ? (books.length ? (cur ? `Saldo ${cur.name}: ${fmt(cur.total)}` : 'Pilih aset yang dicairkan.') : 'Belum ada aset yang bisa dicairkan.')
+      : (name ? (cur ? `Saldo saat ini ${fmt(cur.total)}` : 'Aset baru akan dibuat.') : `Kosongkan untuk "${ASSET.DEFAULT}".`);
   };
 
   const setDate = (iso) => {
@@ -782,6 +982,16 @@ function openTxForm(existing = null) {
     else if (f.amount > 1e13) { showErr('err-amount', 'Nominal terlalu besar.'); ok = false; }
     else showErr('err-amount', '');
     if (!f.category) { showErr('err-cat', 'Pilih salah satu kategori.'); ok = false; } else showErr('err-cat', '');
+    if (isAssetCat(f.type, f.category) && f.type === 'pemasukan') {
+      const name = f.asset.trim();
+      const bal = assetBalances().find((a) => a.name === name);
+      let msg = '';
+      if (!name) msg = 'Pilih aset yang dicairkan.';
+      else if (!bal || bal.total <= 0) msg = `Aset "${name}" tidak punya saldo.`;
+      else if (f.amount > bal.total) msg = `Melebihi saldo ${name} (${fmt(bal.total)}).`;
+      $('#err-asset', body).textContent = msg;
+      if (msg) ok = false;
+    } else $('#err-asset', body).textContent = '';
     if (!/^\d{4}-\d{2}-\d{2}$/.test(f.date)) { toast('Tanggal tidak valid.', 'error'); ok = false; }
     if (!ok && (!f.amount || f.amount <= 0)) amountEl.focus();
     return ok;
@@ -800,8 +1010,11 @@ function openTxForm(existing = null) {
       f.category = cb.dataset.cat;
       $$('[data-cat]', body).forEach((b) => { const on = b === cb; b.classList.toggle('is-active', on); b.setAttribute('aria-checked', on); });
       showErr('err-cat', '');
+      renderAssetField();
       return;
     }
+    const ap = e.target.closest('[data-asset-pick]');
+    if (ap) { f.asset = ap.dataset.assetPick; renderAssetField(); $('#err-asset', body).textContent = ''; return; }
     const qb = e.target.closest('[data-quick]');
     if (qb) {
       const n = Math.min(U.parseDigits(amountEl.value) + Number(qb.dataset.quick), 1e13);
@@ -813,11 +1026,18 @@ function openTxForm(existing = null) {
     if (db) setDate(U.addDays(U.today(), Number(db.dataset.date)));
   });
   $('#f-date', body).addEventListener('change', (e) => { if (e.target.value) setDate(e.target.value); });
+  $('#f-asset', body).addEventListener('input', (e) => {
+    f.asset = e.target.value;
+    $$('[data-asset-pick]', body).forEach((b) => b.classList.toggle('is-active', b.dataset.assetPick === f.asset.trim()));
+    $('#err-asset', body).textContent = '';
+    updateAssetHint();
+  });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!validate()) return;
-    const tx = { type: f.type, amount: f.amount, category: f.category, date: f.date, note: $('#f-note', body).value.trim() };
+    const tx = { type: f.type, amount: f.amount, category: f.category, date: f.date, note: $('#f-note', body).value.trim(),
+      asset: isAssetCat(f.type, f.category) ? (f.asset.trim() || ASSET.DEFAULT) : '' };
     prefs.lastType = f.type; savePrefs();
     if (existing) await submitEdit(existing, tx, $('#f-submit', body));
     else submitAdd(tx);
@@ -842,7 +1062,7 @@ function submitAdd(tx) {
   toast('Menyimpan…', 'loading', { id: 'save' });
   flushQueue()
     .then(() => {
-      if (!state.queue.some((q) => q.tx.id === item.id)) toast(`${TYPE_LABEL[tx.type]} ${fmt(tx.amount)} tersimpan`, 'success', { id: 'save' });
+      if (!state.queue.some((q) => q.tx.id === item.id)) toast(isAssetTx(tx) ? `${tx.type === 'pengeluaran' ? 'Disetor ke' : 'Dicairkan dari'} ${assetName(tx)}: ${fmt(tx.amount)}` : `${TYPE_LABEL[tx.type]} ${fmt(tx.amount)} tersimpan`, 'success', { id: 'save' });
     })
     .catch(() => toast('Offline. Disimpan di HP dan akan dikirim otomatis saat online.', 'warn', { id: 'save', duration: 4500 }))
     .finally(render);
@@ -905,12 +1125,13 @@ function openDetail(id) {
   const body = openSheet(`
     <div class="sheet-head"><h2>Detail Transaksi</h2><button class="icon-btn" data-close aria-label="Tutup">${I.x}</button></div>
     <div class="detail">
-      <div class="detail-icon ${t.type}">${esc(catIcon(t.type, t.category))}</div>
-      <div class="detail-type">${TYPE_LABEL[t.type]} · ${esc(t.category)}</div>
-      <div class="detail-amt ${t.type}">${inc ? '+' : '-'}${fmt(t.amount)}</div>
+      <div class="detail-icon ${isAssetTx(t) ? 'aset' : t.type}">${esc(catIcon(t.type, t.category))}</div>
+      <div class="detail-type">${isAssetTx(t) ? (inc ? 'Pencairan aset' : 'Setoran ke aset') : `${TYPE_LABEL[t.type]} · ${esc(t.category)}`}</div>
+      <div class="detail-amt ${isAssetTx(t) ? 'aset' : t.type}">${inc ? '+' : '-'}${fmt(t.amount)}</div>
       ${t.pending ? '<span class="badge-pending">Menunggu sinkron</span>' : ''}
       <dl class="kv">
         ${multiUser() ? `<div><dt>Oleh</dt><dd>${esc(t.owner || state.users[0])}${isMine(t) ? ' (kamu)' : ''}</dd></div>` : ''}
+        ${isAssetTx(t) ? `<div><dt>Aset</dt><dd>${esc(assetName(t))}</dd></div>` : ''}
         <div><dt>Tanggal</dt><dd>${U.formatDate(t.date, 'long')}</dd></div>
         <div><dt>Catatan</dt><dd>${t.note ? esc(t.note) : '<span class="muted">—</span>'}</dd></div>
         <div><dt>Dicatat</dt><dd>${created}</dd></div>
@@ -1003,6 +1224,7 @@ async function addCategory(form) {
 }
 
 async function deleteCategory(name) {
+  if (isAssetCat(state.catTab, name)) { toast(`Kategori "${name}" dipakai untuk fitur Aset dan tidak bisa dihapus.`, 'error'); return; }
   const ok = await confirmDialog({
     title: `Hapus kategori "${name}"?`,
     text: 'Kategori hilang dari pilihan. Transaksi lama dengan kategori ini <b>tetap tersimpan</b> dan tetap terhitung di dashboard.',
@@ -1157,7 +1379,9 @@ function bindEvents() {
     const t = e.target;
     if (t.closest('[data-close]')) return closeSheet();
     const nav = t.closest('[data-nav]');
-    if (nav) return setView(nav.dataset.nav);
+    if (nav) { if (sheetOpen) closeSheet(); return setView(nav.dataset.nav); }
+    const ao = t.closest('[data-asset-open]');
+    if (ao) return openAsset(ao.dataset.assetOpen);
     const tx = t.closest('[data-tx]');
     if (tx) return openDetail(tx.dataset.tx);
     const per = t.closest('[data-period]');
@@ -1199,6 +1423,8 @@ function bindEvents() {
     const act = t.closest('[data-action]')?.dataset.action;
     if (!act) return;
     if (act === 'add') return openTxForm();
+    if (act === 'asset-add') return openTxForm(null, { type: 'pengeluaran', category: ASSET.OUT });
+    if (act === 'asset-withdraw') return openTxForm(null, { type: 'pemasukan', category: ASSET.IN });
     if (act === 'sync') return sync();
     if (act === 'hist-filter') return openHistFilter();
     if (act === 'hist-more') { state.hist.limit += 60; return renderHistList(); }

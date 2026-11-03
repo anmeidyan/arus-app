@@ -5,7 +5,7 @@
  * - Permintaan ke Google Apps Script TIDAK pernah di-cache.
  * Naikkan VERSION setiap kali kamu mengubah file aplikasi.
  */
-const VERSION = 'arus-v1.2.4';
+const VERSION = 'arus-v1.3.0';
 const SHELL = [
   './', './index.html', './css/styles.css',
   './js/app.js', './js/api.js', './js/utils.js', './js/charts.js',

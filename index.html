@@ -19,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
-  <link rel="stylesheet" href="css/styles.css?v=1.2.4">
+  <link rel="stylesheet" href="css/styles.css?v=1.3.0">
   <script>try{var p=JSON.parse(localStorage.getItem("arus.prefs.v1"));if(p&&p.theme&&p.theme!=="indigo")document.documentElement.dataset.theme=p.theme}catch(e){}</script>
 </head>
 <body>
@@ -28,7 +28,11 @@
   <div id="app" hidden>
     <header class="topbar">
       <div class="topbar-title" id="topbar-title"></div>
-      <button class="sync-btn" id="sync-btn" data-action="sync" type="button"></button>
+      <div class="topbar-actions">
+        <button class="sync-btn" id="sync-btn" data-action="sync" type="button"></button>
+        <button class="topbar-icon" data-nav="settings" type="button" aria-label="Pengaturan">
+          <svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg></button>
+      </div>
     </header>
 
     <main id="view" class="view" tabindex="-1"></main>
@@ -44,12 +48,12 @@
         <button type="button" class="fab" data-action="add" aria-label="Tambah transaksi">
           <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
       </div>
+      <button type="button" data-nav="assets">
+        <svg viewBox="0 0 24 24"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16" height="11" rx="2.5"/><path d="M16 13.5h.01"/></svg>
+        <span>Aset</span></button>
       <button type="button" data-nav="stats">
         <svg viewBox="0 0 24 24"><path d="M4 20h16"/><rect x="5.5" y="11" width="3" height="6" rx="1"/><rect x="10.5" y="5" width="3" height="12" rx="1"/><rect x="15.5" y="8.5" width="3" height="8.5" rx="1"/></svg>
         <span>Statistik</span></button>
-      <button type="button" data-nav="settings">
-        <svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg>
-        <span>Atur</span></button>
     </nav>
   </div>
 
@@ -59,6 +63,6 @@
   <div id="toast-root" aria-live="polite"></div>
 
   <noscript><p style="padding:24px;font-family:sans-serif">Aktifkan JavaScript untuk memakai Arus.</p></noscript>
-  <script type="module" src="js/app.js?v=1.2.4"></script>
+  <script type="module" src="js/app.js?v=1.3.0"></script>
 </body>
 </html>

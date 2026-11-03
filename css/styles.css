@@ -557,3 +557,52 @@ select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
 .bc-carry { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -8px 0 14px; font-size: 12.5px; opacity: .92; font-variant-numeric: tabular-nums; }
 .bc-carry span { opacity: .8; }
 .bc-carry b { font-weight: 700; margin-left: 4px; }
+
+/* ---------- Topbar: tombol pengaturan ---------- */
+.topbar-actions { display: flex; align-items: center; gap: 6px; }
+.topbar-icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; color: var(--text-2); background: var(--bg-soft); border: 1px solid var(--line); }
+.topbar-icon svg { width: 19px; height: 19px; }
+.topbar-icon.is-active { color: var(--brand); border-color: var(--brand); background: var(--brand-soft); }
+
+/* ---------- Aset ---------- */
+:root { --aset: #0EA5E9; --aset-bg: #E8F6FD; }
+.c-aset { color: var(--aset); }
+.tx-icon.aset, .detail-icon.aset { background: var(--aset-bg); }
+.tx-amt.aset, .detail-amt.aset { color: var(--aset); }
+.bc-asset { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 10px; padding: 9px 10px 9px 12px; border-radius: 14px;
+  background: rgba(255, 255, 255, .14); border: 1px solid rgba(255, 255, 255, .22); color: #fff; font-size: 12.5px; text-align: left; font-variant-numeric: tabular-nums; }
+.bc-asset span { flex: 1; min-width: 0; opacity: .95; }
+.bc-asset b { font-weight: 700; }
+.bc-asset svg { width: 17px; height: 17px; flex: none; opacity: .9; }
+.asset-hero { position: relative; overflow: hidden; isolation: isolate; padding: 20px 18px 16px; border-radius: var(--r-lg); color: #fff;
+  background: linear-gradient(140deg, #0B4F8A 0%, #0E7AC4 45%, #0EA5E9 80%, #5EEAD4 130%); box-shadow: 0 18px 50px rgba(14, 122, 196, .25); }
+.asset-hero .bc-carry { margin: 12px 0 0; }
+.asset-hero .bc-ic { color: #0E7AC4; }
+.asset-actions { margin: 14px 0 0; }
+.asset-list { display: flex; flex-direction: column; }
+.asset-row { display: flex; align-items: center; gap: 12px; width: calc(100% + 12px); margin: 0 -6px; padding: 10px 6px; text-align: left; border-radius: 14px; }
+.asset-row + .asset-row { border-top: 1px solid var(--line); border-radius: 0; }
+.asset-row:active { background: var(--bg-soft); }
+.asset-row.is-closed { opacity: .6; }
+.asset-ic { width: 42px; height: 42px; flex: none; border-radius: 14px; display: grid; place-items: center; font-size: 20px; background: var(--aset-bg); color: var(--aset); font-weight: 800; }
+.asset-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.asset-name { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asset-sub { font-size: 12.5px; color: var(--muted); }
+.asset-val { display: flex; flex-direction: column; align-items: flex-end; font-weight: 800; font-size: 14.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.asset-val small { font-size: 11px; color: var(--muted); font-weight: 600; }
+.asset-sep { margin: 14px 0 2px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.asset-detail { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.asset-detail .kv { width: 100%; text-align: left; margin-top: 10px; }
+.sheet-actions.three { grid-template-columns: 1fr 1fr 1fr; }
+.sheet-actions.three .btn { padding: 0 6px; font-size: 13.5px; white-space: nowrap; }
+.asset-sub .owner-tag { vertical-align: 1px; }
+.rename-form { display: flex; gap: 8px; margin-top: 12px; }
+.rename-form .input { flex: 1; min-width: 0; height: 42px; }
+.sheet-sub { margin: 20px 0 4px; font-size: 14px; font-weight: 700; color: var(--text-2); }
+.asset-field .input { margin-top: 2px; }
+.asset-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.asset-picks:empty { display: none; }
+.asset-picks .chip { height: 32px; font-size: 12.5px; padding: 0 12px; }
+.asset-picks .chip.is-active { background: var(--aset-bg); border-color: var(--aset); color: #0B6FA8; }
+.field-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }
+.field-hint:empty { display: none; }
