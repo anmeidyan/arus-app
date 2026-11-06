@@ -606,3 +606,6 @@ select.input { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://ww
 .asset-picks .chip.is-active { background: var(--aset-bg); border-color: var(--aset); color: #0B6FA8; }
 .field-hint { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }
 .field-hint:empty { display: none; }
+
+.asset-contrib { font-size: 11.5px; font-weight: 600; color: var(--aset); margin-top: 1px; }
+.field-hint.center { text-align: center; margin-top: 10px; }
